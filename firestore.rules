@@ -1,0 +1,25 @@
+rules_version = '2';
+
+// Regras de segurança do Firestore para o app Visita Técnica.
+//
+// Modelo de dados: cada usuário autenticado tem sua própria subcoleção
+// em /users/{uid}/visits/{visitId}. Isso mantém as regras simples e
+// seguras por padrão: ninguém lê ou escreve dados de outro usuário.
+//
+// Como aplicar: Console do Firebase > Firestore Database > Regras,
+// cole o conteúdo abaixo e publique.
+//
+// Observação para a dupla: se a ideia do projeto evoluir para um
+// cenário de "central despacha, todos os técnicos veem todas as
+// visitas", o modelo de dados precisaria mudar para uma coleção única
+// (ex.: /visits/{visitId} com um campo "createdBy"), e essas regras
+// precisariam ser reescritas para refletir esse novo requisito de
+// compartilhamento. Para o escopo de MVP da dupla, o isolamento por
+// usuário abaixo é a opção mais simples e mais segura por padrão.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/visits/{visitId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
