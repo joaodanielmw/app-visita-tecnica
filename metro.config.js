@@ -22,5 +22,6 @@ const config = getDefaultConfig(__dirname);
  */
 config.resolver.sourceExts.push('cjs');
 config.resolver.unstable_enablePackageExports = false;
+config.resolver.assetExts.push('wasm');
 
 module.exports = config;
