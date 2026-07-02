@@ -64,7 +64,7 @@ export function useVisits(): UseVisitsResult {
   }, [reloadFromLocal]);
 
   const syncNow = useCallback(async () => {
-    if (!user || !isOnline) return;
+    if (!user || !isOnline || user.uid === 'guest') return;
     setIsSyncing(true);
     try {
       const result = await runFullSync(user.uid);
