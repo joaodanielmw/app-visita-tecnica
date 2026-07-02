@@ -1,4 +1,6 @@
 # Visita Técnica — App de checklist de visitas em campo
+Alunos: Vinicius Moreira, João Daniel Machado Weng
+Colaborador: Vitor Camargo Kunicki
 
 App React Native (Expo + TypeScript) para registrar visitas técnicas em
 campo, com persistência local (offline-first) e sincronização com
