@@ -1,117 +1,90 @@
-import * as SQLite from 'expo-sqlite';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Visit } from '../types/visit';
 
 /**
- * Camada de acesso ao SQLite local. Este é o "source of truth" para a UI:
- * toda leitura e escrita do app passa por aqui primeiro — o Firestore é
- * tratado como um espelho remoto, nunca como a fonte imediata de dados
- * (esse é o princípio de offline-first: a tela nunca trava esperando rede).
+ * Camada de acesso ao armazenamento local (agora usando AsyncStorage).
+ * Este é o "source of truth" para a UI: toda leitura e escrita do app
+ * passa por aqui primeiro — o Firestore é tratado como um espelho remoto,
+ * nunca como a fonte imediata de dados.
  */
 
-const DB_NAME = 'visitas.db';
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+const STORAGE_KEY = '@visita_tecnica_visits';
 
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) {
-    dbPromise = SQLite.openDatabaseAsync(DB_NAME);
+async function getAllVisitsLocal(): Promise<Visit[]> {
+  try {
+    const json = await AsyncStorage.getItem(STORAGE_KEY);
+    return json ? JSON.parse(json) : [];
+  } catch (error) {
+    console.error('Erro ao ler visitas do AsyncStorage', error);
+    return [];
   }
-  return dbPromise;
 }
 
-/** Cria a tabela na primeira execução. Chamar uma vez na inicialização do app. */
+async function saveAllVisitsLocal(visits: Visit[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(visits));
+  } catch (error) {
+    console.error('Erro ao salvar visitas no AsyncStorage', error);
+  }
+}
+
+/** Cria a tabela na primeira execução (no SQLite). No AsyncStorage, mantemos apenas por compatibilidade com o App.tsx. */
 export async function initDatabase(): Promise<void> {
-  const db = await getDb();
-  await db.execAsync(`
-    PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS visits (
-      id TEXT PRIMARY KEY NOT NULL,
-      clientName TEXT NOT NULL,
-      osNumber TEXT NOT NULL,
-      visitDate TEXT NOT NULL,
-      arrivalTime TEXT NOT NULL,
-      departureTime TEXT NOT NULL,
-      technician TEXT NOT NULL,
-      visitType TEXT NOT NULL,
-      createdAt INTEGER NOT NULL,
-      updatedAt INTEGER NOT NULL,
-      syncStatus TEXT NOT NULL,
-      deletedAt INTEGER
-    );
-  `);
+  return Promise.resolve();
 }
 
 export async function insertVisitLocal(visit: Visit): Promise<void> {
-  const db = await getDb();
-  await db.runAsync(
-    `INSERT INTO visits
-      (id, clientName, osNumber, visitDate, arrivalTime, departureTime, technician, visitType, createdAt, updatedAt, syncStatus, deletedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      visit.id,
-      visit.clientName,
-      visit.osNumber,
-      visit.visitDate,
-      visit.arrivalTime,
-      visit.departureTime,
-      visit.technician,
-      visit.visitType,
-      visit.createdAt,
-      visit.updatedAt,
-      visit.syncStatus,
-      visit.deletedAt,
-    ]
-  );
+  const visits = await getAllVisitsLocal();
+  visits.push(visit);
+  await saveAllVisitsLocal(visits);
 }
 
 export async function updateVisitLocal(visit: Visit): Promise<void> {
-  const db = await getDb();
-  await db.runAsync(
-    `UPDATE visits SET
-      clientName = ?, osNumber = ?, visitDate = ?, arrivalTime = ?, departureTime = ?,
-      technician = ?, visitType = ?, updatedAt = ?, syncStatus = ?, deletedAt = ?
-     WHERE id = ?`,
-    [
-      visit.clientName,
-      visit.osNumber,
-      visit.visitDate,
-      visit.arrivalTime,
-      visit.departureTime,
-      visit.technician,
-      visit.visitType,
-      visit.updatedAt,
-      visit.syncStatus,
-      visit.deletedAt,
-      visit.id,
-    ]
-  );
+  const visits = await getAllVisitsLocal();
+  const index = visits.findIndex(v => v.id === visit.id);
+  if (index >= 0) {
+    visits[index] = visit;
+    await saveAllVisitsLocal(visits);
+  }
 }
 
 /** Visitas "vivas" (não excluídas), para a tela de listagem. */
 export async function getActiveVisitsLocal(): Promise<Visit[]> {
-  const db = await getDb();
-  return db.getAllAsync<Visit>(
-    `SELECT * FROM visits WHERE deletedAt IS NULL ORDER BY visitDate DESC, arrivalTime DESC`
-  );
+  const visits = await getAllVisitsLocal();
+  const active = visits.filter(v => v.deletedAt === null);
+  
+  // Ordenar: primeiro por data decrescente, depois por horário decrescente
+  active.sort((a, b) => {
+    if (a.visitDate !== b.visitDate) {
+      return a.visitDate > b.visitDate ? -1 : 1;
+    }
+    if (a.arrivalTime !== b.arrivalTime) {
+      return a.arrivalTime > b.arrivalTime ? -1 : 1;
+    }
+    return 0;
+  });
+  
+  return active;
 }
 
 export async function getVisitByIdLocal(id: string): Promise<Visit | null> {
-  const db = await getDb();
-  const row = await db.getFirstAsync<Visit>(`SELECT * FROM visits WHERE id = ?`, [id]);
-  return row ?? null;
+  const visits = await getAllVisitsLocal();
+  return visits.find(v => v.id === id) ?? null;
 }
 
 /** Tudo que ainda não foi confirmado no Firestore (criado, editado ou
  *  marcado para exclusão enquanto o app estava offline). */
 export async function getPendingVisitsLocal(): Promise<Visit[]> {
-  const db = await getDb();
-  return db.getAllAsync<Visit>(`SELECT * FROM visits WHERE syncStatus != 'synced'`);
+  const visits = await getAllVisitsLocal();
+  return visits.filter(v => v.syncStatus !== 'synced');
 }
 
 /** Remove a linha de fato — só deve ser chamado depois que a exclusão
  *  remota (Firestore) já foi confirmada pelo syncService. */
 export async function hardDeleteVisitLocal(id: string): Promise<void> {
-  const db = await getDb();
-  await db.runAsync(`DELETE FROM visits WHERE id = ?`, [id]);
+  let visits = await getAllVisitsLocal();
+  visits = visits.filter(v => v.id !== id);
+  await saveAllVisitsLocal(visits);
 }
 
 /**
