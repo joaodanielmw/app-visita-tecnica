@@ -46,7 +46,7 @@ export function VisitListScreen({ navigation }: Props) {
     <View style={styles.container}>
       <View style={styles.topBar}>
         <Text style={styles.userEmail} numberOfLines={1}>
-          {user?.email}
+          {user?.email || 'Convidado'}
         </Text>
         <Pressable onPress={signOutUser} accessibilityRole="button">
           <Text style={styles.logoutText}>Sair</Text>

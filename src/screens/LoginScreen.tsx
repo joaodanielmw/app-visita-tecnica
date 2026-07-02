@@ -18,7 +18,7 @@ import { colors, spacing, type } from '../theme';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 export function LoginScreen({ navigation }: Props) {
-  const { signIn } = useAuth();
+  const { signIn, signInAsGuest } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,6 +33,18 @@ export function LoginScreen({ navigation }: Props) {
     setErrorMessage(null);
     try {
       await signIn(email, password);
+    } catch (error) {
+      setErrorMessage(getAuthErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGuestLogin() {
+    setLoading(true);
+    setErrorMessage(null);
+    try {
+      await signInAsGuest();
     } catch (error) {
       setErrorMessage(getAuthErrorMessage(error));
     } finally {
@@ -78,6 +90,11 @@ export function LoginScreen({ navigation }: Props) {
           <PrimaryButton
             label="Criar conta"
             onPress={() => navigation.navigate('SignUp')}
+            variant="secondary"
+          />
+          <PrimaryButton
+            label="Entrar como Convidado"
+            onPress={handleGuestLogin}
             variant="secondary"
           />
         </View>

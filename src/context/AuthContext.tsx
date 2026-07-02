@@ -7,6 +7,7 @@ import {
   signOut as firebaseSignOut,
   type User,
 } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth } from '../services/firebase';
 
 interface AuthContextValue {
@@ -16,6 +17,7 @@ interface AuthContextValue {
   initializing: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
+  signInAsGuest: () => Promise<void>;
   signOutUser: () => Promise<void>;
 }
 
@@ -26,9 +28,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      setInitializing(false);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setUser(firebaseUser);
+        setInitializing(false);
+      } else {
+        const isGuest = await AsyncStorage.getItem('@visita_tecnica_guest');
+        if (isGuest === 'true') {
+          setUser({ uid: 'guest', isAnonymous: true, email: 'Convidado (Local)' } as User);
+        } else {
+          setUser(null);
+        }
+        setInitializing(false);
+      }
     });
     return unsubscribe;
   }, []);
@@ -37,13 +49,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     initializing,
     signIn: async (email, password) => {
+      await AsyncStorage.removeItem('@visita_tecnica_guest');
       await signInWithEmailAndPassword(auth, email.trim(), password);
     },
     signUp: async (email, password) => {
+      await AsyncStorage.removeItem('@visita_tecnica_guest');
       await createUserWithEmailAndPassword(auth, email.trim(), password);
     },
+    signInAsGuest: async () => {
+      await AsyncStorage.setItem('@visita_tecnica_guest', 'true');
+      setUser({ uid: 'guest', isAnonymous: true, email: 'Convidado (Local)' } as User);
+    },
     signOutUser: async () => {
-      await firebaseSignOut(auth);
+      await AsyncStorage.removeItem('@visita_tecnica_guest');
+      if (auth.currentUser) {
+        await firebaseSignOut(auth);
+      }
+      setUser(null);
     },
   };
 
